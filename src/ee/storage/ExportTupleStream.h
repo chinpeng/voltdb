@@ -125,8 +125,8 @@ public:
     virtual void extendBufferChain(size_t minLength);
 
     virtual int partitionId() { return m_partitionId; }
-    void setNew() { m_new = true; }
-    bool isNew() { return m_new; }
+    void setAppendSchema(bool appendSchema) { m_appendSchema = appendSchema; }
+    bool appendSchema() { return m_appendSchema; }
 
     inline ExportTupleStream* getNextFlushStream() const {
         return m_nextFlushStream;
@@ -155,7 +155,7 @@ private:
     const int64_t m_siteId;
 
     // This indicates that stream is new or has been marked as new after UAC so that we include schema in next export stream write.
-    bool m_new;
+    bool m_appendSchema;
     std::string m_signature;
     int64_t m_generation;
     const std::string &m_tableName;

@@ -172,7 +172,7 @@ public class TaskLogImpl implements TaskLog {
                 @Override
                 public void run() {
                     try {
-                        BBContainer cont = m_reader.poll(PersistentBinaryDeque.UNSAFE_CONTAINER_FACTORY);
+                        BBContainer cont = m_reader.poll(PersistentBinaryDeque.UNSAFE_CONTAINER_FACTORY, false);
                         if (cont != null) {
                            m_headBuffers.offer(new RejoinTaskBuffer(cont));
                         }

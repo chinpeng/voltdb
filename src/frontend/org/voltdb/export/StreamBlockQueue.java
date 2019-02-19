@@ -41,12 +41,16 @@ import org.voltdb.utils.VoltFile;
  * portion of the queue.
  *
  * Export PBD buffer layout:
- *    --- Buffer Header   ---
- *    seqNo(8) + tupleCount(4) + uniqueId(8) + exportVersion(1) + generationId(8) + schemaLen(4) + tupleSchema(var length)
+ *    --- Entry Header   ---
+ *    crc(8) + length(4) + flags(4)
+ *    --- Export-specific Header ---
  *    {
+ *          // Optional, only exists in the first entry.
+ *          exportVersion(1) + generationId(8) + schemaLen(4) + tupleSchema(var length) +
  *          ---Inside schema---
  *          tableNameLength(4) + tableName(var length) + colNameLength(4) + colName(var length) + colType(1) + colLength(4) + ...
  *    }
+ *    seqNo(8) + tupleCount(4) + uniqueId(8)
  *    --- Row Header      ---
  *    rowLength(4) + partitionColumnIndex(4) + columnCount(4, includes metadata columns) +
  *    nullArrayLength(4) + nullArray(var length)
@@ -108,8 +112,12 @@ public class StreamBlockQueue {
      */
     private StreamBlock pollPersistentDeque(boolean actuallyPoll) {
         BBContainer cont = null;
+        boolean hasSchema = false;
         try {
-            cont = m_reader.poll(PersistentBinaryDeque.UNSAFE_CONTAINER_FACTORY);
+            // First object of the segment contains export table schema
+            hasSchema = m_reader.isReadFirstObjectOfSegment();
+            cont = m_reader.poll(PersistentBinaryDeque.UNSAFE_CONTAINER_FACTORY, false);
+
         } catch (IOException e) {
             exportLog.error(e);
         }
@@ -120,16 +128,17 @@ public class StreamBlockQueue {
             cont.b().order(ByteOrder.LITTLE_ENDIAN);
             //If the container is not null, unpack it.
             final BBContainer fcont = cont;
-            long seqNo = cont.b().getLong(0);
-            int tupleCount = cont.b().getInt(8);
-            long uniqueId = cont.b().getLong(12);
+            long seqNo = cont.b().getLong(StreamBlock.SEQUENCE_NUMBER_OFFSET);
+            int tupleCount = cont.b().getInt(StreamBlock.ROW_NUMBER_OFFSET);
+            long uniqueId = cont.b().getLong(StreamBlock.UNIQUE_ID_OFFSET);
             //Pass the stream block a subset of the bytes, provide
             //a container that discards the original returned by the persistent deque
             StreamBlock block = new StreamBlock( fcont,
                 seqNo,
                 tupleCount,
                 uniqueId,
-                true);
+                true,
+                hasSchema);
 
             //Optionally store a reference to the block in the in memory deque
             if (!actuallyPoll) {
@@ -280,9 +289,17 @@ public class StreamBlockQueue {
         m_persistentDeque.parseAndTruncate(new BinaryDequeTruncator() {
 
             @Override
-            public TruncatorResponse parse(BBContainer bbc) {
+            public TruncatorResponse parse(BBContainer bbc, boolean firstObject) {
                 ByteBuffer b = bbc.b();
                 b.order(ByteOrder.LITTLE_ENDIAN);
+                // First object of segment contains export version number and export table schema
+                if (firstObject) {
+                    byte version = b.get(); // export version
+                    assert(version == EXPORT_BUFFER_VERSION);
+                    b.getLong(); // generation id
+                    int skipSchema = b.getInt() + b.position();
+                    b.position(skipSchema);
+                }
                 final long startSequenceNumber = b.getLong();
                 // If after the truncation point is the first row in the block, the entire block is to be discarded
                 if (startSequenceNumber > truncationSeqNo) {
@@ -296,11 +313,6 @@ public class StreamBlockQueue {
                     return null;
                 }
                 b.getLong(); // uniqueId
-                byte version = b.get(); // export version
-                assert(version == EXPORT_BUFFER_VERSION);
-                b.getLong(); // generation id
-                int firstRowStart = b.getInt() + b.position();
-                b.position(firstRowStart);
 
                 // Partial truncation
                 int offset = 0;
@@ -341,9 +353,17 @@ public class StreamBlockQueue {
         assert(m_memoryDeque.isEmpty());
         return m_persistentDeque.scanForGap(new BinaryDequeScanner() {
 
-            public ExportSequenceNumberTracker scan(BBContainer bbc) {
+            public ExportSequenceNumberTracker scan(BBContainer bbc, boolean firstObject) {
                 ByteBuffer b = bbc.b();
                 b.order(ByteOrder.LITTLE_ENDIAN);
+                // First object of segment contains export version number and export table schema
+                if (firstObject) {
+                    byte version = b.get(); // export version
+                    assert(version == EXPORT_BUFFER_VERSION);
+                    b.getLong(); // generation id
+                    int skipSchema = b.getInt() + b.position();
+                    b.position(skipSchema);
+                }
                 final long startSequenceNumber = b.getLong();
                 final int tupleCount = b.getInt();
                 ExportSequenceNumberTracker gapTracker = new ExportSequenceNumberTracker();
@@ -354,6 +374,10 @@ public class StreamBlockQueue {
         });
     }
 
+    // Create new segment to store data from new generation
+    public void observeNewGeneration() throws IOException {
+        m_persistentDeque.openNewSegment();
+    }
 
     @Override
     public void finalize() {
@@ -371,5 +395,4 @@ public class StreamBlockQueue {
             }
         }
     }
-
 }

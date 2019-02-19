@@ -152,6 +152,11 @@ public class ExportDataSource implements Comparable<ExportDataSource> {
     private boolean m_runEveryWhere = false;
     // It is used to filter stale message responses
     private long m_currentRequestId = 0L;
+    // *Generation Id* is actually a timestamp generated during catalog update(UpdateApplicationBase.java)
+    // genId in this class represents the genId of the most recent pushed buffer. If a new buffer contains
+    // different genId than the previous value, the new buffer needs to be written to new PBD segment.
+    //
+    private long m_previousGenId;
 
     private ExportSequenceNumberTracker m_gapTracker = new ExportSequenceNumberTracker();
 
@@ -198,12 +203,14 @@ public class ExportDataSource implements Comparable<ExportDataSource> {
             String tableName,
             int partitionId,
             int siteId,
+            long genId,
             String signature,
             CatalogMap<Column> catalogMap,
             Column partitionColumn,
             String overflowPath
             ) throws IOException
     {
+        m_previousGenId = genId;
         m_generation = generation;
         m_format = ExportFormat.SEVENDOTX;
         m_database = db;
@@ -304,7 +311,9 @@ public class ExportDataSource implements Comparable<ExportDataSource> {
 
     public ExportDataSource(Generation generation, File adFile,
             List<Pair<Integer, Integer>> localPartitionsToSites,
-            final ExportDataProcessor processor) throws IOException {
+            final ExportDataProcessor processor,
+            final long genId) throws IOException {
+        m_previousGenId = genId;
         m_generation = generation;
         m_adFile = adFile;
         String overflowPath = adFile.getParent();
@@ -635,6 +644,7 @@ public class ExportDataSource implements Comparable<ExportDataSource> {
             long startSequenceNumber,
             int tupleCount,
             long uniqueId,
+            long genId,
             ByteBuffer buffer,
             boolean poll) throws Exception {
         final java.util.concurrent.atomic.AtomicBoolean deleted = new java.util.concurrent.atomic.AtomicBoolean(false);
@@ -669,7 +679,7 @@ public class ExportDataSource implements Comparable<ExportDataSource> {
                                 cont.discard();
                                 deleted.set(true);
                             }
-                        }, startSequenceNumber, tupleCount, uniqueId, false);
+                        }, startSequenceNumber, tupleCount, uniqueId, false, false /*only poll cares schema flag*/);
 
                 // Mark release sequence number to partially acked buffer.
                 if (isAcked(sb.startSequenceNumber())) {
@@ -689,6 +699,11 @@ public class ExportDataSource implements Comparable<ExportDataSource> {
                 m_lastPushedSeqNo = lastSequenceNumber;
                 m_tupleCount += newTuples;
                 m_tuplesPending.addAndGet((int)newTuples);
+                assert (genId >= m_previousGenId);
+                // Data with new genId is arriving, use separate file to store it
+                if (genId != m_previousGenId) {
+                    m_committedBuffers.observeNewGeneration();
+                }
                 m_committedBuffers.offer(sb);
             } catch (IOException e) {
                 VoltDB.crashLocalVoltDB("Unable to write to export overflow.", true, e);
@@ -707,6 +722,7 @@ public class ExportDataSource implements Comparable<ExportDataSource> {
             final long startSequenceNumber,
             final int tupleCount,
             final long uniqueId,
+            final long genId,
             final ByteBuffer buffer,
             final boolean sync) {
         try {
@@ -718,7 +734,7 @@ public class ExportDataSource implements Comparable<ExportDataSource> {
         if (m_es.isShutdown()) {
             //If we are shutting down push it to PBD
             try {
-                pushExportBufferImpl(startSequenceNumber, tupleCount, uniqueId, buffer, false);
+                pushExportBufferImpl(startSequenceNumber, tupleCount, uniqueId, genId, buffer, false);
             } catch (Throwable t) {
                 VoltDB.crashLocalVoltDB("Error pushing export  buffer", true, t);
             } finally {
@@ -732,7 +748,7 @@ public class ExportDataSource implements Comparable<ExportDataSource> {
                 public void run() {
                     try {
                         if (!m_es.isShutdown()) {
-                            pushExportBufferImpl(startSequenceNumber, tupleCount, uniqueId, buffer, m_readyForPolling);
+                            pushExportBufferImpl(startSequenceNumber, tupleCount, uniqueId, genId, buffer, m_readyForPolling);
                         }
                     } catch (Throwable t) {
                         VoltDB.crashLocalVoltDB("Error pushing export  buffer", true, t);
@@ -999,7 +1015,8 @@ public class ExportDataSource implements Comparable<ExportDataSource> {
                 }
                 final AckingContainer ackingContainer =
                         new AckingContainer(first_unpolled_block.unreleasedContainer(),
-                                first_unpolled_block.startSequenceNumber() + first_unpolled_block.rowCount() - 1);
+                                first_unpolled_block.startSequenceNumber() + first_unpolled_block.rowCount() - 1,
+                                first_unpolled_block.hasSchema());
                 try {
                     fut.set(ackingContainer);
                 } catch (RejectedExecutionException reex) {
@@ -1016,15 +1033,24 @@ public class ExportDataSource implements Comparable<ExportDataSource> {
         final long m_lastSeqNo;
         final BBContainer m_backingCont;
         long m_startTime = 0;
+        final boolean m_hasSchema;
 
-        public AckingContainer(BBContainer cont, long seq) {
+        public AckingContainer(BBContainer cont, long seq, boolean hasSchema) {
             super(cont.b());
             m_lastSeqNo = seq;
             m_backingCont = cont;
+            m_hasSchema = hasSchema;
         }
 
         public void updateStartTime(long startTime) {
             m_startTime = startTime;
+        }
+
+        /*
+         * Is the buffer encapsulated by this container has export table schema
+         */
+        public boolean hasSchema() {
+            return m_hasSchema;
         }
 
         @Override

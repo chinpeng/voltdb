@@ -106,7 +106,7 @@ StreamedTable::~StreamedTable() {
 // Stream writes were done so commit all the writes
 void StreamedTable::notifyQuantumRelease() {
     if (m_wrapper) {
-        assert(!m_wrapper->isNew());
+        assert(!m_wrapper->appendSchema());
         m_wrapper->commit(m_executorContext->getContextEngine(),
                 m_executorContext->currentSpHandle(), m_executorContext->currentUniqueId());
     }

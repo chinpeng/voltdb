@@ -46,9 +46,13 @@ import org.voltdb.iv2.UniqueIdGenerator;
  */
 public class StreamBlock {
 
-    public static final int HEADER_SIZE = 20; //sequence number + row count + uniqueId
+    public static final int HEADER_SIZE = 20; //sequence number(8) + row count(4) + uniqueId(8)
+    public static final int SEQUENCE_NUMBER_OFFSET = 0;
+    public static final int ROW_NUMBER_OFFSET = 8;
+    public static final int UNIQUE_ID_OFFSET = 12;
 
-    StreamBlock(BBContainer cont, long startSequenceNumber, int rowCount, long uniqueId, boolean isPersisted) {
+    StreamBlock(BBContainer cont, long startSequenceNumber, int rowCount,
+            long uniqueId, boolean isPersisted, boolean hasSchema) {
         m_buffer = cont;
         m_startSequenceNumber = startSequenceNumber;
         m_rowCount = rowCount;
@@ -58,6 +62,8 @@ public class StreamBlock {
         m_totalSize = m_buffer.b().remaining();
         //The first 8 bytes are space for us to store the sequence number if we end up persisting
         m_isPersisted = isPersisted;
+        // Export table schema is optional for stream block, only the first block of a PBD segment has it
+        m_hasSchema = hasSchema;
     }
 
     private final AtomicInteger m_refCount = new AtomicInteger(1);
@@ -132,6 +138,10 @@ public class StreamBlock {
         return m_isPersisted;
     }
 
+    boolean hasSchema() {
+        return m_hasSchema;
+    }
+
     private final long m_startSequenceNumber;
     private final int m_rowCount;
     private final long m_uniqueId;
@@ -145,6 +155,12 @@ public class StreamBlock {
      * if the buffer is only stored in memory. No guarantees about fsync though
      */
     private final boolean m_isPersisted;
+
+    /*
+     *  Export table schema is optional for stream block, only
+     *  the first block of a PBD segment has it
+     */
+    private final boolean m_hasSchema;
 
     BBContainer unreleasedContainer() {
         m_refCount.incrementAndGet();
@@ -167,10 +183,10 @@ public class StreamBlock {
      */
     BBContainer asBBContainer() {
         m_buffer.b().order(ByteOrder.LITTLE_ENDIAN);
-        m_buffer.b().putLong(0, startSequenceNumber());
-        m_buffer.b().putInt(8, rowCount());
-        m_buffer.b().putLong(12, uniqueId());
-        m_buffer.b().position(0);
+        m_buffer.b().putLong(SEQUENCE_NUMBER_OFFSET, startSequenceNumber());
+        m_buffer.b().putInt(ROW_NUMBER_OFFSET, rowCount());
+        m_buffer.b().putLong(UNIQUE_ID_OFFSET, uniqueId());
+        m_buffer.b().position(SEQUENCE_NUMBER_OFFSET);
         m_buffer.b().order(ByteOrder.BIG_ENDIAN);
         return getRefCountingContainer(m_buffer.b().asReadOnlyBuffer());
     }

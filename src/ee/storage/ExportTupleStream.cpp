@@ -63,7 +63,7 @@ ExportTupleStream::ExportTupleStream(CatalogId partitionId, int64_t siteId, int6
 
 {
     extendBufferChain(m_defaultCapacity);
-    m_new = true;
+    m_appendSchema = true;
 }
 
 void ExportTupleStream::setSignatureAndGeneration(std::string signature, int64_t generation) {
@@ -117,8 +117,7 @@ size_t ExportTupleStream::appendTuple(
         //If we can not fit the data get a new block with size that includes schemaSize as well.
         extendBufferChain(tupleMaxLength);
     }
-    bool includeSchema = m_currBlock->needsSchema();
-    if (includeSchema) {
+    if (appendSchema()) {
         ExportSerializeOutput blkhdr(m_currBlock->headerDataPtr()+s_EXPORT_BUFFER_HEADER_SIZE,
                           m_currBlock->headerSize() - (MAGIC_HEADER_SPACE_FOR_JAVA+s_EXPORT_BUFFER_HEADER_SIZE));
         // FIXED_BUFFER_HEADER
@@ -129,7 +128,8 @@ size_t ExportTupleStream::appendTuple(
         blkhdr.writeInt(m_ddlSchemaSize);
         // Schema
         writeSchema(blkhdr, tuple);
-        m_currBlock->noSchema();
+        // Don't need the schema until next UAC
+        setAppendSchema(false);
     }
 
     // initialize the full row header to 0. This also
@@ -179,8 +179,6 @@ size_t ExportTupleStream::appendTuple(
 //    cout << "Appending row " << streamHeaderSz + io.position() << " to uso " << m_currBlock->uso()
 //            << " sequence number " << seqNo
 //            << " offset " << m_currBlock->offset() << std::endl;
-    //Not new anymore as we have new transaction after UAC
-    m_new = false;
     return startingUso;
 }
 
@@ -374,7 +372,8 @@ void ExportTupleStream::pushStreamBuffer(ExportStreamBlock *block, bool sync) {
                     m_partitionId,
                     m_signature,
                     block,
-                    sync);
+                    sync,
+                    m_generation);
 }
 
 void ExportTupleStream::pushEndOfStream() {

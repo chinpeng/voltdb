@@ -66,6 +66,7 @@ public class GuestProcessor implements ExportDataProcessor {
 
     private final long m_startTS = System.currentTimeMillis();
     private volatile boolean m_startPolling = false;
+    private long m_genId;
 
     // Instantiated at ExportManager
     public GuestProcessor() {
@@ -346,21 +347,28 @@ public class GuestProcessor implements ExportDataProcessor {
                                 final ByteBuffer buf = cont.b();
                                 buf.position(startPosition);
                                 buf.order(ByteOrder.LITTLE_ENDIAN);
-                                byte version = buf.get();
-                                assert(version == StreamBlockQueue.EXPORT_BUFFER_VERSION);
-                                long generation = buf.getLong();
-                                int schemaSize = buf.getInt();
-                                ExportRow previousRow = edb.getPreviousRow();
-                                if (previousRow == null || previousRow.generation != generation) {
-                                    byte[] schemadata = new byte[schemaSize];
-                                    buf.get(schemadata, 0, schemaSize);
-                                    ByteBuffer sbuf = ByteBuffer.wrap(schemadata);
-                                    sbuf.order(ByteOrder.LITTLE_ENDIAN);
-                                    edb.setPreviousRow(ExportRow.decodeBufferSchema(sbuf, schemaSize, source.getPartitionId(), generation));
-                                }
-                                else {
-                                    // Skip past the schema header because it has not changed.
-                                    buf.position(buf.position() + schemaSize);
+                                if (cont.hasSchema()) {
+                                    byte version = buf.get();
+                                    assert(version == StreamBlockQueue.EXPORT_BUFFER_VERSION);
+                                    // update the global generation id of guest processor
+                                    m_genId = buf.getLong();
+                                    int schemaSize = buf.getInt();
+                                    ExportRow previousRow = edb.getPreviousRow();
+                                    // update the decoder if current generation is different than previous row
+                                    if (previousRow == null || previousRow.generation != m_genId) {
+                                        byte[] schemadata = new byte[schemaSize];
+                                        buf.get(schemadata, 0, schemaSize);
+                                        ByteBuffer sbuf = ByteBuffer.wrap(schemadata);
+                                        sbuf.order(ByteOrder.LITTLE_ENDIAN);
+                                        edb.setPreviousRow(
+                                                ExportRow.decodeBufferSchema(
+                                                        sbuf, schemaSize,
+                                                        source.getPartitionId(), m_genId));
+                                    } else {
+                                        // If generation is same, skip past the schema header
+                                        // because it has not changed.
+                                        buf.position(buf.position() + schemaSize);
+                                    }
                                 }
                                 ExportRow row = null;
                                 boolean firstRowOfBlock = true;

@@ -109,6 +109,8 @@ public interface BinaryDeque {
 
     public void closeAndDelete() throws IOException;
 
+    public void openNewSegment() throws IOException;
+
     /**
      * Reader class used to read entries from the deque. Multiple readers may be active at the same time,
      * each of them maintaining their own read location within the deque.
@@ -118,10 +120,11 @@ public interface BinaryDeque {
          * Read and return the object at the current read position of this reader.
          * The entry will be removed once all active readers have read the entry.
          * @param ocf
+         * @param checkCRC
          * @return BBContainer with the bytes read. Null if there is nothing left to read.
          * @throws IOException
          */
-        public BBContainer poll(OutputContainerFactory ocf) throws IOException;
+        public BBContainer poll(OutputContainerFactory ocf, boolean checkCRC) throws IOException;
 
         /**
          * Number of bytes left to read for this reader.
@@ -143,6 +146,13 @@ public interface BinaryDeque {
          * @throws IOException
          */
         public boolean isEmpty() throws IOException;
+
+        /**
+         * Is the object this reader going to read the first object of segment?
+         * @return true if the object this reader going to read is the first object of segment
+         * throws IOException
+         */
+        public boolean isReadFirstObjectOfSegment() throws IOException;
     }
 
     public static class TruncatorResponse {
@@ -178,10 +188,10 @@ public interface BinaryDeque {
          * then the last object passed to parse will be truncated out of the deque. Part of the object
          * or a new object can be returned to replace it.
          */
-        public TruncatorResponse parse(BBContainer bb);
+        public TruncatorResponse parse(BBContainer bb, boolean firstObject);
     }
 
     public interface BinaryDequeScanner {
-        public ExportSequenceNumberTracker scan(BBContainer bb);
+        public ExportSequenceNumberTracker scan(BBContainer bb, boolean firstObject);
     }
 }
