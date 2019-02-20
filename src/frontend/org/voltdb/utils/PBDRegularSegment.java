@@ -437,12 +437,7 @@ public class PBDRegularSegment extends PBDSegment {
             try {
                 //Get the length and size prefix and then read the object
                 m_tmpHeaderBuf.b().clear();
-                while (m_tmpHeaderBuf.b().hasRemaining()) {
-                    int read = m_fc.read(m_tmpHeaderBuf.b());
-                    if (read == -1) {
-                        throw new EOFException();
-                    }
-                }
+                read(m_tmpHeaderBuf.b());
                 m_tmpHeaderBuf.b().flip();
                 final int length = m_tmpHeaderBuf.b().getInt();
                 final int flags = m_tmpHeaderBuf.b().getInt();
@@ -457,12 +452,7 @@ public class PBDRegularSegment extends PBDSegment {
                 if (compressed) {
                     final DBBPool.BBContainer compressedBuf = DBBPool.allocateDirectAndPool(length);
                     try {
-                        while (compressedBuf.b().hasRemaining()) {
-                            int read = m_fc.read(compressedBuf.b());
-                            if (read == -1) {
-                                throw new EOFException();
-                            }
-                        }
+                        read(compressedBuf.b());
                         compressedBuf.b().flip();
 
                         uncompressedLen = CompressionService.uncompressedLength(compressedBuf.bDR());
@@ -476,12 +466,7 @@ public class PBDRegularSegment extends PBDSegment {
                     uncompressedLen = length;
                     retcont = factory.getContainer(length);
                     retcont.b().limit(length);
-                    while (retcont.b().hasRemaining()) {
-                        int read = m_fc.read(retcont.b());
-                        if (read == -1) {
-                            throw new EOFException();
-                        }
-                    }
+                    read(retcont.b());
                     retcont.b().flip();
                 }
 
@@ -508,6 +493,21 @@ public class PBDRegularSegment extends PBDSegment {
                 m_readOffset = m_fc.position();
                 m_fc.position(writePos);
             }
+        }
+
+        private void read(ByteBuffer buffer) throws IOException {
+            do {
+                int read;
+                try {
+                    read = m_fc.read(buffer);
+                } catch (IOException e) {
+                    throw new IOException("Error encountered reading: " + m_file, e);
+                }
+                if (read == -1) {
+                    throw new EOFException("EOF encountered reading " + m_file + " at position " + m_fc.position()
+                            + " expected to be able to read " + buffer.remaining());
+                }
+            } while (buffer.hasRemaining());
         }
 
         @Override
