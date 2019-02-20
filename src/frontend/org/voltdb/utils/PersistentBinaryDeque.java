@@ -1004,6 +1004,11 @@ public class PersistentBinaryDeque implements BinaryDeque {
     }
 
     @Override
+    public boolean isClosed() {
+        return m_closed;
+    }
+
+    @Override
     public synchronized Pair<Integer, Long> getBufferCountAndSize() throws IOException {
         int count = 0;
         long size = 0;

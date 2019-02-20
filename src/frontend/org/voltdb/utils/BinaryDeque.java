@@ -103,6 +103,11 @@ public interface BinaryDeque {
      */
     public void close() throws IOException;
 
+    /**
+     * @return {@code true} if {@link #close()} has been invoked on this instance
+     */
+    public boolean isClosed();
+
     public boolean initializedFromExistingFiles();
 
     public Pair<Integer, Long> getBufferCountAndSize() throws IOException;
