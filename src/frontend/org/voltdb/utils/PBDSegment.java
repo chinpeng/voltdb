@@ -42,18 +42,16 @@ public abstract class PBDSegment {
          * Are there any more entries to read from this segment for this reader
          *
          * @return true if there are still more entries to be read. False otherwise.
-         * @throws IOException if the reader was closed or on any error trying to read from the segment file.
          */
-        public boolean hasMoreEntries() throws IOException;
+        public boolean hasMoreEntries();
 
         /**
          * Have all the entries in this segment been read by this reader and
          * acknowledged as ready for discarding.
          *
          * @return true if all entries have been read and discarded by this reader. False otherwise.
-         * @throws IOException if the reader was closed
          */
-        public boolean allReadAndDiscarded() throws IOException;
+        public boolean allReadAndDiscarded();
 
         /**
          * Read the next entry from the segment for this reader.
@@ -266,7 +264,9 @@ public abstract class PBDSegment {
      * @throws IOException
      */
     ExportSequenceNumberTracker scan(BinaryDeque.BinaryDequeScanner scanner) throws IOException {
-        if (!m_closed) throw new IOException(("Segment should not be open before truncation"));
+        if (!m_closed) {
+            throw new IOException(("Segment should not be open before truncation"));
+        }
 
         openForWrite(false);
         PBDSegmentReader reader = openForRead(SCANNER_CURSOR);

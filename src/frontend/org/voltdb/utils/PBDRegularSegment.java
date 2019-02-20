@@ -107,7 +107,9 @@ public class PBDRegularSegment extends PBDSegment {
             m_numOfEntries = 0;
             m_size = 0;
         }
-        if (wasClosed) closeReadersAndFile();
+        if (wasClosed) {
+            closeReadersAndFile();
+        }
         return m_numOfEntries;
     }
 
@@ -260,7 +262,9 @@ public class PBDRegularSegment extends PBDSegment {
 
     @Override
     public void sync() throws IOException {
-        if (m_closed) throw new IOException("Segment closed");
+        if (m_closed) {
+            throw new IOException("Segment closed");
+        }
         if (!m_syncedSinceLastEdit) {
             m_fc.force(true);
         }
@@ -269,9 +273,13 @@ public class PBDRegularSegment extends PBDSegment {
 
     @Override
     public boolean hasAllFinishedReading() throws IOException {
-        if (m_closed) throw new IOException("Segment closed");
+        if (m_closed) {
+            throw new IOException("Segment closed");
+        }
 
-        if (m_readCursors.size() == 0) return false;
+        if (m_readCursors.size() == 0) {
+            return false;
+        }
 
         for (SegmentReader reader : m_readCursors.values()) {
             if (reader.m_objectReadIndex < m_numOfEntries) {
@@ -285,12 +293,18 @@ public class PBDRegularSegment extends PBDSegment {
     @Override
     public boolean offer(DBBPool.BBContainer cont, boolean compress) throws IOException
     {
-        if (m_closed) throw new IOException("Segment closed");
+        if (m_closed) {
+            throw new IOException("Segment closed");
+        }
         final ByteBuffer buf = cont.b();
         final int remaining = buf.remaining();
-        if (remaining < 32 || !buf.isDirect()) compress = false;
+        if (remaining < 32 || !buf.isDirect()) {
+            compress = false;
+        }
         final int maxCompressedSize = (compress ? CompressionService.maxCompressedLength(remaining) : remaining) + OBJECT_HEADER_BYTES;
-        if (remaining() < maxCompressedSize) return false;
+        if (remaining() < maxCompressedSize) {
+            return false;
+        }
 
         m_syncedSinceLastEdit = false;
         DBBPool.BBContainer destBuf = cont;
@@ -334,9 +348,13 @@ public class PBDRegularSegment extends PBDSegment {
     @Override
     public int offer(DeferredSerialization ds) throws IOException
     {
-        if (m_closed) throw new IOException("closed");
+        if (m_closed) {
+            throw new IOException("closed");
+        }
         final int fullSize = ds.getSerializedSize() + OBJECT_HEADER_BYTES;
-        if (remaining() < fullSize) return -1;
+        if (remaining() < fullSize) {
+            return -1;
+        }
 
         m_syncedSinceLastEdit = false;
         DBBPool.BBContainer destBuf = DBBPool.allocateDirectAndPool(fullSize);
@@ -393,26 +411,21 @@ public class PBDRegularSegment extends PBDSegment {
             m_cursorId = cursorId;
         }
 
-        private void resetReader() {
-            m_objectReadIndex = 0;
-            m_bytesRead = 0;
-            m_readOffset = SEGMENT_HEADER_BYTES;
-            m_discardCount = 0;
-        }
-
         @Override
-        public boolean hasMoreEntries() throws IOException {
+        public boolean hasMoreEntries() {
             return m_objectReadIndex < m_numOfEntries;
         }
 
         @Override
-        public boolean allReadAndDiscarded() throws IOException {
+        public boolean allReadAndDiscarded() {
             return m_discardCount == m_numOfEntries;
         }
 
         @Override
         public BBContainer poll(OutputContainerFactory factory) throws IOException {
-            if (m_closed) throw new IOException("Reader closed");
+            if (m_closed) {
+                throw new IOException("Reader closed");
+            }
 
             if (!hasMoreEntries()) {
                 return null;
@@ -499,7 +512,9 @@ public class PBDRegularSegment extends PBDSegment {
 
         @Override
         public int uncompressedBytesToRead() {
-            if (m_closed) throw new RuntimeException("Reader closed");
+            if (m_closed) {
+                throw new RuntimeException("Reader closed");
+            }
 
             return m_size - m_bytesRead;
         }
