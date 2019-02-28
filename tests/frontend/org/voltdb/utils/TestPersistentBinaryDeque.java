@@ -219,7 +219,7 @@ public class TestPersistentBinaryDeque {
 
         m_pbd.parseAndTruncate(new BinaryDequeTruncator() {
             @Override
-            public TruncatorResponse parse(BBContainer bbc, boolean firstObject) {
+            public TruncatorResponse parse(BBContainer bbc) {
                 return PersistentBinaryDeque.fullTruncateResponse();
             }
 
@@ -249,7 +249,7 @@ public class TestPersistentBinaryDeque {
 
         m_pbd.parseAndTruncate(new BinaryDequeTruncator() {
             @Override
-            public TruncatorResponse parse(BBContainer bbc, boolean firstObject) {
+            public TruncatorResponse parse(BBContainer bbc) {
                 fail();
                 return null;
             }
@@ -300,7 +300,7 @@ public class TestPersistentBinaryDeque {
         m_pbd.parseAndTruncate(new BinaryDequeTruncator() {
             private long m_objectsParsed = 0;
             @Override
-            public TruncatorResponse parse(BBContainer bbc, boolean firstObject) {
+            public TruncatorResponse parse(BBContainer bbc) {
                 ByteBuffer b = bbc.b();
                 if (b.getLong(0) != m_objectsParsed) {
                     System.out.println("asd");
@@ -374,7 +374,7 @@ public class TestPersistentBinaryDeque {
         m_pbd.parseAndTruncate(new BinaryDequeTruncator() {
             private long m_objectsParsed = 0;
             @Override
-            public TruncatorResponse parse(BBContainer bbc, boolean firstObject) {
+            public TruncatorResponse parse(BBContainer bbc) {
                 ByteBuffer b = bbc.b();
                 assertEquals(b.getLong(0), m_objectsParsed);
                 assertEquals(b.remaining(), 1024 * 1024 * 2 );

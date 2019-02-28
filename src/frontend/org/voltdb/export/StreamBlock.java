@@ -51,9 +51,10 @@ public class StreamBlock {
     public static final int ROW_NUMBER_OFFSET = 8;
     public static final int UNIQUE_ID_OFFSET = 12;
 
-    StreamBlock(BBContainer cont, long startSequenceNumber, int rowCount,
-            long uniqueId, boolean isPersisted, boolean hasSchema) {
-        m_buffer = cont;
+    StreamBlock(BBContainer fcont, BBContainer schemaCont, long startSequenceNumber, int rowCount,
+            long uniqueId, boolean isPersisted) {
+        m_buffer = fcont;
+        m_schema = schemaCont;
         m_startSequenceNumber = startSequenceNumber;
         m_rowCount = rowCount;
         m_uniqueId = uniqueId;
@@ -62,23 +63,30 @@ public class StreamBlock {
         m_totalSize = m_buffer.b().remaining();
         //The first 8 bytes are space for us to store the sequence number if we end up persisting
         m_isPersisted = isPersisted;
-        // Export table schema is optional for stream block, only the first block of a PBD segment has it
-        m_hasSchema = hasSchema;
     }
 
-    private final AtomicInteger m_refCount = new AtomicInteger(1);
+    private final AtomicInteger m_bufferRefCount = new AtomicInteger(1);
+    private final AtomicInteger m_schemaRefCount = new AtomicInteger(1);
 
     /*
      * Call discard on the underlying buffer used for storage
      */
     void discard() {
-        final int count = m_refCount.decrementAndGet();
+        final int count = m_bufferRefCount.decrementAndGet();
         if (count == 0) {
             m_buffer.discard();
             m_buffer = null;
         } else if (count < 0) {
             VoltDB.crashLocalVoltDB("Broken refcounting in export", true, null);
         }
+        final int refCount = m_schemaRefCount.decrementAndGet();
+        if (refCount == 0) {
+            m_schema.discard();
+            m_schema = null;
+        } else if (refCount < 0) {
+            VoltDB.crashLocalVoltDB("Broken refcounting of schema in export", true, null);
+        }
+
     }
 
     long startSequenceNumber() {
@@ -138,15 +146,12 @@ public class StreamBlock {
         return m_isPersisted;
     }
 
-    boolean hasSchema() {
-        return m_hasSchema;
-    }
-
     private final long m_startSequenceNumber;
     private final int m_rowCount;
     private final long m_uniqueId;
     private final long m_totalSize;
     private BBContainer m_buffer;
+    private BBContainer m_schema;
     // index of the last row that has been released.
     private int m_releaseOffset = -1;
 
@@ -156,15 +161,17 @@ public class StreamBlock {
      */
     private final boolean m_isPersisted;
 
-    /*
-     *  Export table schema is optional for stream block, only
-     *  the first block of a PBD segment has it
-     */
-    private final boolean m_hasSchema;
-
     BBContainer unreleasedContainer() {
-        m_refCount.incrementAndGet();
+        m_bufferRefCount.incrementAndGet();
         return getRefCountingContainer(m_buffer.b().slice().asReadOnlyBuffer());
+    }
+
+    BBContainer getSchemaContainer() {
+        if (m_schema == null) {
+            return null;
+        }
+        m_schemaRefCount.incrementAndGet();
+        return getRefCountingContainer(m_schema.b().slice().asReadOnlyBuffer());
     }
 
     private BBContainer getRefCountingContainer(ByteBuffer buf) {

@@ -55,6 +55,7 @@ public class PBDRegularSegment extends PBDSegment {
     private int m_size = -1;
 
     private DBBPool.BBContainer m_segmentHeaderBuf = null;
+    private DBBPool.BBContainer m_segmentExtraHeaderBuf = null;
     private DBBPool.BBContainer m_entryHeaderBuf = null;
     Boolean INJECT_PBD_CHECKSUM_ERROR = Boolean.getBoolean("INJECT_PBD_CHECKSUM_ERROR");
 
@@ -406,6 +407,17 @@ public class PBDRegularSegment extends PBDSegment {
         return written;
     }
 
+    @Override
+    public void writeExtraHeader(DeferredSerialization ds) throws IOException {
+        DBBPool.BBContainer destBuf = DBBPool.allocateDirectAndPool(ds.getSerializedSize());
+        ds.serialize(destBuf.b());
+        destBuf.b().flip();
+        m_fc.position(PBDSegment.SEGMENT_HEADER_BYTES);
+        while (destBuf.b().hasRemaining()) {
+            m_fc.write(destBuf.b());
+        }
+    }
+
     private class SegmentReader implements PBDSegmentReader {
         private final String m_cursorId;
         private long m_readOffset = SEGMENT_HEADER_BYTES;
@@ -547,6 +559,49 @@ public class PBDRegularSegment extends PBDSegment {
                     }
                 };
             } finally {
+                m_readOffset = m_fc.position();
+                m_fc.position(writePos);
+            }
+        }
+
+        @Override
+        public DBBPool.BBContainer getSchema(OutputContainerFactory factory, boolean checkCRC) throws IOException {
+            if (m_closed) throw new IOException("Reader closed");
+
+            if (!hasMoreEntries()) {
+                return null;
+            }
+
+            final long writePos = m_fc.position();
+            m_fc.position(SEGMENT_HEADER_BYTES);
+
+            DBBPool.BBContainer schemaHeader = null;
+            try {
+                schemaHeader = DBBPool.allocateDirect(EXPORT_SCHEMA_HEADER_BYTES);
+                while (schemaHeader.b().hasRemaining()) {
+                    int read = m_fc.read(schemaHeader.b());
+                    if (read == -1) {
+                        throw new EOFException();
+                    }
+                }
+                byte exportVersion = schemaHeader.b().get();
+                long genId = schemaHeader.b().getLong();
+                int schemaSize = schemaHeader.b().getInt();
+                DBBPool.BBContainer schemaBuf = DBBPool.allocateDirect(EXPORT_SCHEMA_HEADER_BYTES + schemaSize);
+                schemaBuf.b().put(exportVersion);
+                schemaBuf.b().putLong(genId);
+                schemaBuf.b().putInt(schemaSize);
+                while (schemaBuf.b().hasRemaining()) {
+                    int read = m_fc.read(schemaBuf.b());
+                    if (read == -1) {
+                        throw new EOFException();
+                    }
+                }
+                return schemaBuf;
+            } finally {
+                if (schemaHeader != null) {
+                    schemaHeader.discard();
+                }
                 m_readOffset = m_fc.position();
                 m_fc.position(writePos);
             }

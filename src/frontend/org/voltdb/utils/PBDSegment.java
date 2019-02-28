@@ -68,6 +68,9 @@ public abstract class PBDSegment {
         public DBBPool.BBContainer poll(BinaryDeque.OutputContainerFactory factory,
                 boolean checkCRC) throws IOException;
 
+        public DBBPool.BBContainer getSchema(BinaryDeque.OutputContainerFactory factory,
+                boolean checkCRC) throws IOException;
+
         //Don't use size in bytes to determine empty, could potentially
         //diverge from object count on crash or power failure
         //although incredibly unlikely
@@ -122,6 +125,8 @@ public abstract class PBDSegment {
     public static final int HEADER_CRC_OFFSET = 0;
     public static final int HEADER_NUM_OF_ENTRY_OFFSET = 8;
     public static final int HEADER_TOTAL_BYTES_OFFSET = 12;
+
+    static final int EXPORT_SCHEMA_HEADER_BYTES = 1 /*export buffer version*/ + 8 /*generation id*/ + 4 /*schema size*/;
     // Export Segment Entry Header layout (each segment has multiple entries):
     //  - crc of segment entry (8 bytes),
     //  - total bytes of the entry (4 bytes),
@@ -194,6 +199,8 @@ public abstract class PBDSegment {
 
     abstract protected int writeTruncatedEntry(BinaryDeque.TruncatorResponse entry) throws IOException;
 
+    abstract void writeExtraHeader(DeferredSerialization ds) throws IOException;
+
     /**
      * Parse the segment and truncate the file if necessary.
      * @param truncator    A caller-supplied truncator that decides where in the segment to truncate
@@ -224,7 +231,9 @@ public abstract class PBDSegment {
         while (true) {
             final long beforePos = reader.readOffset();
 
-            boolean firstObject = reader.readIndex() == 0;
+            if (reader.readIndex() == 0) {
+                reader.getSchema(PersistentBinaryDeque.UNSAFE_CONTAINER_FACTORY, !isFinal());
+            }
 
             cont = reader.poll(PersistentBinaryDeque.UNSAFE_CONTAINER_FACTORY, !isFinal());
             if (cont == null) {
@@ -236,7 +245,7 @@ public abstract class PBDSegment {
 
             try {
                 //Handoff the object to the truncator and await a decision
-                BinaryDeque.TruncatorResponse retval = truncator.parse(cont, firstObject);
+                BinaryDeque.TruncatorResponse retval = truncator.parse(cont);
                 if (retval == null) {
                     //Nothing to do, leave the object alone and move to the next
                     sizeInBytes += uncompressedLength;

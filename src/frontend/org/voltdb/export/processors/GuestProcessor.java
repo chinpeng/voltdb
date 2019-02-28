@@ -347,17 +347,20 @@ public class GuestProcessor implements ExportDataProcessor {
                                 final ByteBuffer buf = cont.b();
                                 buf.position(startPosition);
                                 buf.order(ByteOrder.LITTLE_ENDIAN);
-                                if (cont.hasSchema()) {
-                                    byte version = buf.get();
+                                final ByteBuffer schemaBuf = cont.schema();
+                                if (schemaBuf != null) {
+                                    schemaBuf.position(0);
+                                    schemaBuf.order(ByteOrder.LITTLE_ENDIAN);
+                                    byte version = schemaBuf.get();
                                     assert(version == StreamBlockQueue.EXPORT_BUFFER_VERSION);
                                     // update the global generation id of guest processor
-                                    m_genId = buf.getLong();
-                                    int schemaSize = buf.getInt();
+                                    m_genId = schemaBuf.getLong();
+                                    int schemaSize = schemaBuf.getInt();
                                     ExportRow previousRow = edb.getPreviousRow();
                                     // update the decoder if current generation is different than previous row
                                     if (previousRow == null || previousRow.generation != m_genId) {
                                         byte[] schemadata = new byte[schemaSize];
-                                        buf.get(schemadata, 0, schemaSize);
+                                        schemaBuf.get(schemadata, 0, schemaSize);
                                         ByteBuffer sbuf = ByteBuffer.wrap(schemadata);
                                         sbuf.order(ByteOrder.LITTLE_ENDIAN);
                                         edb.setPreviousRow(

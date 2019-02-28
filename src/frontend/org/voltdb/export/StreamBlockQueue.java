@@ -24,6 +24,7 @@ import java.util.Iterator;
 
 import org.voltcore.logging.VoltLogger;
 import org.voltcore.utils.DBBPool.BBContainer;
+import org.voltcore.utils.DeferredSerialization;
 import org.voltdb.utils.BinaryDeque;
 import org.voltdb.utils.BinaryDeque.BinaryDequeReader;
 import org.voltdb.utils.BinaryDeque.BinaryDequeScanner;
@@ -112,10 +113,12 @@ public class StreamBlockQueue {
      */
     private StreamBlock pollPersistentDeque(boolean actuallyPoll) {
         BBContainer cont = null;
-        boolean hasSchema = false;
+        BBContainer schemaCont = null;
         try {
-            // First object of the segment contains export table schema
-            hasSchema = m_reader.isReadFirstObjectOfSegment();
+            // Start to read a new segment
+            if (m_reader.isReadFirstObjectOfSegment()) {
+                schemaCont = m_reader.getSchema(PersistentBinaryDeque.UNSAFE_CONTAINER_FACTORY, false);
+            }
             cont = m_reader.poll(PersistentBinaryDeque.UNSAFE_CONTAINER_FACTORY, false);
 
         } catch (IOException e) {
@@ -134,11 +137,11 @@ public class StreamBlockQueue {
             //Pass the stream block a subset of the bytes, provide
             //a container that discards the original returned by the persistent deque
             StreamBlock block = new StreamBlock( fcont,
+                schemaCont,
                 seqNo,
                 tupleCount,
                 uniqueId,
-                true,
-                hasSchema);
+                true);
 
             //Optionally store a reference to the block in the in memory deque
             if (!actuallyPoll) {
@@ -233,8 +236,8 @@ public class StreamBlockQueue {
     /*
      * Only allow two blocks in memory, put the rest in the persistent deque
      */
-    public void offer(StreamBlock streamBlock) throws IOException {
-        m_persistentDeque.offer(streamBlock.asBBContainer(), !DISABLE_COMPRESSION);
+    public void offer(StreamBlock streamBlock, DeferredSerialization ds, boolean createNewFile) throws IOException {
+        m_persistentDeque.offer(streamBlock.asBBContainer(), ds, !DISABLE_COMPRESSION, createNewFile);
         long unreleasedSeqNo = streamBlock.unreleasedSequenceNumber();
         if (m_memoryDeque.size() < 2) {
             StreamBlock fromPBD = pollPersistentDeque(false);
@@ -289,17 +292,9 @@ public class StreamBlockQueue {
         m_persistentDeque.parseAndTruncate(new BinaryDequeTruncator() {
 
             @Override
-            public TruncatorResponse parse(BBContainer bbc, boolean firstObject) {
+            public TruncatorResponse parse(BBContainer bbc) {
                 ByteBuffer b = bbc.b();
                 b.order(ByteOrder.LITTLE_ENDIAN);
-                // First object of segment contains export version number and export table schema
-                if (firstObject) {
-                    byte version = b.get(); // export version
-                    assert(version == EXPORT_BUFFER_VERSION);
-                    b.getLong(); // generation id
-                    int skipSchema = b.getInt() + b.position();
-                    b.position(skipSchema);
-                }
                 final long startSequenceNumber = b.getLong();
                 // If after the truncation point is the first row in the block, the entire block is to be discarded
                 if (startSequenceNumber > truncationSeqNo) {
@@ -372,11 +367,6 @@ public class StreamBlockQueue {
             }
 
         });
-    }
-
-    // Create new segment to store data from new generation
-    public void observeNewGeneration() throws IOException {
-        m_persistentDeque.openNewSegment();
     }
 
     @Override

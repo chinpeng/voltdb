@@ -53,10 +53,11 @@ public interface BinaryDeque {
      * is larger then the implementation defined max. 64 megabytes in the case of PersistentBinaryDeque.
      * If there is an exception attempting to write the buffers then all the buffers will be discarded
      * @param object
+     * @param ds
      * @param allowCompression
      * @throws IOException
      */
-    void offer(BBContainer object, boolean allowCompression) throws IOException;
+    void offer(BBContainer object, DeferredSerialization ds, boolean allowCompression, boolean createNewFile) throws IOException;
 
     int offer(DeferredSerialization ds) throws IOException;
 
@@ -109,8 +110,6 @@ public interface BinaryDeque {
 
     public void closeAndDelete() throws IOException;
 
-    public void openNewSegment() throws IOException;
-
     /**
      * Reader class used to read entries from the deque. Multiple readers may be active at the same time,
      * each of them maintaining their own read location within the deque.
@@ -125,6 +124,15 @@ public interface BinaryDeque {
          * @throws IOException
          */
         public BBContainer poll(OutputContainerFactory ocf, boolean checkCRC) throws IOException;
+
+        /**
+         * Read and return the schema of table located in the segment header
+         * @param ocf
+         * @param checkCRC
+         * @return
+         * @throws IOException
+         */
+        public BBContainer getSchema(OutputContainerFactory ocf, boolean checkCRC) throws IOException;
 
         /**
          * Number of bytes left to read for this reader.
@@ -188,7 +196,7 @@ public interface BinaryDeque {
          * then the last object passed to parse will be truncated out of the deque. Part of the object
          * or a new object can be returned to replace it.
          */
-        public TruncatorResponse parse(BBContainer bb, boolean firstObject);
+        public TruncatorResponse parse(BBContainer bb);
     }
 
     public interface BinaryDequeScanner {

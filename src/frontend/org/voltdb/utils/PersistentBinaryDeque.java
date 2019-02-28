@@ -127,6 +127,37 @@ public class PersistentBinaryDeque implements BinaryDeque {
             }
         }
 
+        @Override
+        public BBContainer getSchema(OutputContainerFactory ocf, boolean checkCRC) throws IOException {
+            synchronized (PersistentBinaryDeque.this) {
+                if (m_closed) {
+                    throw new IOException("PBD.ReadCursor.poll(): " + m_cursorId + " - Reader has been closed");
+                }
+                assertions();
+
+                moveToValidSegment();
+                PBDSegmentReader segmentReader = m_segment.getReader(m_cursorId);
+                if (segmentReader == null) {
+                    segmentReader = m_segment.openForRead(m_cursorId);
+                }
+                long lastSegmentId = peekLastSegment().segmentIndex();
+                while (!segmentReader.hasMoreEntries()) {
+                    if (m_segment.segmentIndex() == lastSegmentId) { // nothing more to read
+                        return null;
+                    }
+
+                    segmentReader.close();
+                    m_segment = m_segments.higherEntry(m_segment.segmentIndex()).getValue();
+                    // push to PBD will rewind cursors. So, this cursor may have already opened this segment
+                    segmentReader = m_segment.getReader(m_cursorId);
+                    if (segmentReader == null) segmentReader = m_segment.openForRead(m_cursorId);
+                }
+                BBContainer retcont = segmentReader.getSchema(ocf, checkCRC);
+                assert (retcont.b() != null);
+                return wrapRetCont(m_segment, retcont);
+            }
+        }
+
         private void moveToValidSegment() {
             PBDSegment firstSegment = peekFirstSegment();
             // It is possible that m_segment got closed and removed
@@ -757,11 +788,14 @@ public class PersistentBinaryDeque implements BinaryDeque {
 
     @Override
     public synchronized void offer(BBContainer object) throws IOException {
-        offer(object, true);
+        offer(object, null, true, false);
     }
 
     @Override
-    public synchronized void offer(BBContainer object, boolean allowCompression) throws IOException {
+    public synchronized void offer( BBContainer object,
+                                    DeferredSerialization schemaDS,
+                                    boolean allowCompression,
+                                    boolean createNewFile) throws IOException {
         assertions();
         if (m_closed) {
             throw new IOException("Closed");
@@ -769,8 +803,11 @@ public class PersistentBinaryDeque implements BinaryDeque {
 
         PBDSegment tail = peekLastSegment();
         final boolean compress = object.b().isDirect() && allowCompression;
+        if (createNewFile) {
+            tail = addSegment(tail, schemaDS);
+        }
         if (!tail.offer(object, compress)) {
-            tail = addSegment(tail);
+            tail = addSegment(tail, schemaDS);
             final boolean success = tail.offer(object, compress);
             if (!success) {
                 throw new IOException("Failed to offer object in PBD");
@@ -790,7 +827,7 @@ public class PersistentBinaryDeque implements BinaryDeque {
         PBDSegment tail = peekLastSegment();
         int written = tail.offer(ds);
         if (written < 0) {
-            tail = addSegment(tail);
+            tail = addSegment(tail, null);
             written = tail.offer(ds);
             if (written < 0) {
                 throw new IOException("Failed to offer object in PBD");
@@ -801,7 +838,7 @@ public class PersistentBinaryDeque implements BinaryDeque {
         return written;
     }
 
-    private PBDSegment addSegment(PBDSegment tail) throws IOException {
+    private PBDSegment addSegment(PBDSegment tail, DeferredSerialization schemaDS) throws IOException {
         //Check to see if the tail is completely consumed so we can close and delete it
         if (tail.hasAllFinishedReading() && canDeleteSegment(tail)) {
             pollLastSegment();
@@ -818,6 +855,9 @@ public class PersistentBinaryDeque implements BinaryDeque {
         tail = newSegment(nextIndex, curId, new VoltFile(m_path, fname));
         tail.openForWrite(true);
         tail.setFinal(false);
+        if (schemaDS != null) {
+            tail.writeExtraHeader(schemaDS);
+        }
         if (m_usageSpecificLog.isDebugEnabled()) {
             m_usageSpecificLog.debug("Segment " + tail.file()
                 + " (final: " + tail.isFinal() + "), has been created because of an offer");
@@ -1211,14 +1251,5 @@ public class PersistentBinaryDeque implements BinaryDeque {
         // Reopen the last segment for write
         peekLastSegment().openForWrite(false);
         return gapTracker;
-    }
-
-    public synchronized void openNewSegment() throws IOException {
-        if (m_closed) {
-            throw new IOException("Cannot openNewSegment(): PBD has been closed");
-        }
-        PBDSegment tail = peekLastSegment();
-        addSegment(tail);
-        m_numObjects++;
     }
 }
