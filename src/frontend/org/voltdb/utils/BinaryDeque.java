@@ -160,7 +160,7 @@ public interface BinaryDeque {
          * @return true if the object this reader going to read is the first object of segment
          * throws IOException
          */
-        public boolean isReadFirstObjectOfSegment() throws IOException;
+        public boolean isStartOfSegment() throws IOException;
     }
 
     public static class TruncatorResponse {
@@ -200,6 +200,6 @@ public interface BinaryDeque {
     }
 
     public interface BinaryDequeScanner {
-        public ExportSequenceNumberTracker scan(BBContainer bb, boolean firstObject);
+        public ExportSequenceNumberTracker scan(BBContainer bb);
     }
 }

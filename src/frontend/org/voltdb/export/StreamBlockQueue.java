@@ -136,7 +136,7 @@ public class StreamBlockQueue {
         BBContainer schemaCont = null;
         try {
             // Start to read a new segment
-            if (m_reader.isReadFirstObjectOfSegment()) {
+            if (m_reader.isStartOfSegment()) {
                 schemaCont = m_reader.getSchema(PersistentBinaryDeque.UNSAFE_CONTAINER_FACTORY, false);
             }
             cont = m_reader.poll(PersistentBinaryDeque.UNSAFE_CONTAINER_FACTORY, false);
@@ -370,17 +370,9 @@ public class StreamBlockQueue {
         assert(m_memoryDeque.isEmpty());
         return m_persistentDeque.scanForGap(new BinaryDequeScanner() {
 
-            public ExportSequenceNumberTracker scan(BBContainer bbc, boolean firstObject) {
+            public ExportSequenceNumberTracker scan(BBContainer bbc) {
                 ByteBuffer b = bbc.b();
                 b.order(ByteOrder.LITTLE_ENDIAN);
-                // First object of segment contains export version number and export table schema
-                if (firstObject) {
-                    byte version = b.get(); // export version
-                    assert(version == EXPORT_BUFFER_VERSION);
-                    b.getLong(); // generation id
-                    int skipSchema = b.getInt() + b.position();
-                    b.position(skipSchema);
-                }
                 final long startSequenceNumber = b.getLong();
                 final int tupleCount = b.getInt();
                 ExportSequenceNumberTracker gapTracker = new ExportSequenceNumberTracker();

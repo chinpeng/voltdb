@@ -1084,7 +1084,9 @@ public class ExportDataSource implements Comparable<ExportDataSource> {
 
                         try {
                              m_backingCont.discard();
-                             m_schemaCont.discard();
+                             if (m_schemaCont != null) {
+                                 m_schemaCont.discard();
+                             }
                             try {
                                 if (!m_es.isShutdown()) {
                                     ackImpl(m_lastSeqNo);

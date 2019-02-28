@@ -54,6 +54,7 @@ public class PBDRegularSegment extends PBDSegment {
 
     private int m_numOfEntries = -1;
     private int m_size = -1;
+    private long m_writeOffset = SEGMENT_HEADER_BYTES;
 
     private DBBPool.BBContainer m_segmentHeaderBuf = null;
     private DBBPool.BBContainer m_entryHeaderBuf = null;
@@ -194,8 +195,11 @@ public class PBDRegularSegment extends PBDSegment {
         // Those asserts ensure the file is opened with correct flag
         if (emptyFile) {
             initNumEntries(0, 0);
+            m_fc.position(SEGMENT_HEADER_BYTES);
+            m_writeOffset = SEGMENT_HEADER_BYTES;
+        } else if (forWrite) {
+            m_fc.position(m_writeOffset);
         }
-        m_fc.position(SEGMENT_HEADER_BYTES);
 
         m_closed = false;
     }
@@ -255,6 +259,9 @@ public class PBDRegularSegment extends PBDSegment {
 
     @Override
     public void close() throws IOException {
+        if (m_fc != null) {
+            m_writeOffset = m_fc.position();
+        }
         m_closedCursors.clear();
         closeReadersAndFile();
     }
@@ -499,6 +506,8 @@ public class PBDRegularSegment extends PBDSegment {
                         }
                         compressedBuf.b().flip();
                         if (checkCRC) {
+                            m_crc.update(length);
+                            m_crc.update(flags);
                             m_crc.update(compressedBuf.b());
                             if (entryCRC != m_crc.getValue() || INJECT_PBD_CHECKSUM_ERROR) {
                                 LOG.warn("File corruption detected in " + m_file.getName() + ": checksum error. "
@@ -528,6 +537,8 @@ public class PBDRegularSegment extends PBDSegment {
                     }
                     retcont.b().flip();
                     if (checkCRC) {
+                        m_crc.update(length);
+                        m_crc.update(flags);
                         m_crc.update(retcont.b());
                         retcont.b().flip();
                         if (entryCRC != m_crc.getValue() || INJECT_PBD_CHECKSUM_ERROR) {
@@ -587,6 +598,7 @@ public class PBDRegularSegment extends PBDSegment {
                 long genId = schemaHeader.b().getLong();
                 int schemaSize = schemaHeader.b().getInt();
                 DBBPool.BBContainer schemaBuf = DBBPool.allocateDirect(EXPORT_SCHEMA_HEADER_BYTES + schemaSize);
+                schemaBuf.b().order(ByteOrder.LITTLE_ENDIAN);
                 schemaBuf.b().put(exportVersion);
                 schemaBuf.b().putLong(genId);
                 schemaBuf.b().putInt(schemaSize);
@@ -596,6 +608,7 @@ public class PBDRegularSegment extends PBDSegment {
                         throw new EOFException();
                     }
                 }
+                schemaBuf.b().flip();
                 return schemaBuf;
             } catch (Exception e) {
                 LOG.error(e);

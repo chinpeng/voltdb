@@ -65,28 +65,23 @@ public class StreamBlock {
         m_isPersisted = isPersisted;
     }
 
-    private final AtomicInteger m_bufferRefCount = new AtomicInteger(1);
-    private final AtomicInteger m_schemaRefCount = new AtomicInteger(1);
+    private final AtomicInteger m_refCount = new AtomicInteger(1);
 
     /*
      * Call discard on the underlying buffer used for storage
      */
     void discard() {
-        final int count = m_bufferRefCount.decrementAndGet();
+        final int count = m_refCount.decrementAndGet();
         if (count == 0) {
             m_buffer.discard();
             m_buffer = null;
+            if (m_schema != null) {
+                m_schema.discard();
+                m_schema = null;
+            }
         } else if (count < 0) {
             VoltDB.crashLocalVoltDB("Broken refcounting in export", true, null);
         }
-        final int refCount = m_schemaRefCount.decrementAndGet();
-        if (refCount == 0 && m_schema != null) {
-            m_schema.discard();
-            m_schema = null;
-        } else if (refCount < 0) {
-            VoltDB.crashLocalVoltDB("Broken refcounting of schema in export", true, null);
-        }
-
     }
 
     long startSequenceNumber() {
@@ -162,7 +157,7 @@ public class StreamBlock {
     private final boolean m_isPersisted;
 
     BBContainer unreleasedContainer() {
-        m_bufferRefCount.incrementAndGet();
+        m_refCount.incrementAndGet();
         return getRefCountingContainer(m_buffer.b().slice().asReadOnlyBuffer());
     }
 
@@ -170,7 +165,7 @@ public class StreamBlock {
         if (m_schema == null) {
             return null;
         }
-        m_schemaRefCount.incrementAndGet();
+        m_refCount.incrementAndGet();
         return getRefCountingContainer(m_schema.b().slice().asReadOnlyBuffer());
     }
 
