@@ -121,9 +121,8 @@ public class PBDRegularSegment extends PBDSegment {
                 m_segmentHeaderCRC.update(numOfEntries);
                 m_segmentHeaderCRC.update(size);
                 if (crc != m_segmentHeaderCRC.getValue()) {
-                    LOG.warn("File corruption detected in" + m_file.getName() + ": invalid file header. "
-                            + "Discard the file.");
-                    return m_numOfEntries;
+                    LOG.warn("File corruption detected in" + m_file.getName() + ": invalid file header. ");
+                    throw new IOException("File corruption detected in" + m_file.getName() + ": invalid file header.");
                 }
                 m_numOfEntries = numOfEntries;
                 m_size = size;

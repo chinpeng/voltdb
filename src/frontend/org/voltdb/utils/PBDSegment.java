@@ -229,11 +229,12 @@ public abstract class PBDSegment {
 
         DBBPool.BBContainer cont;
         DBBPool.BBContainer schemaCont = null;
+        boolean isFinal = isFinal();
         while (true) {
             final long beforePos = reader.readOffset();
 
             if (reader.readIndex() == 0) {
-                schemaCont = reader.getSchema(PersistentBinaryDeque.UNSAFE_CONTAINER_FACTORY, !isFinal());
+                schemaCont = reader.getSchema(PersistentBinaryDeque.UNSAFE_CONTAINER_FACTORY, !isFinal);
             }
 
             cont = reader.poll(PersistentBinaryDeque.UNSAFE_CONTAINER_FACTORY, !isFinal());

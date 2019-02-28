@@ -712,8 +712,10 @@ public class ExportDataSource implements Comparable<ExportDataSource> {
                 m_tupleCount += newTuples;
                 m_tuplesPending.addAndGet((int)newTuples);
                 assert (genId >= m_previousGenId);
+                // This serializer is used to write stream schema to pbd
                 StreamTableSchemaSerializer ds = new StreamTableSchemaSerializer(
                         VoltDB.instance().getCatalogContext(), m_tableName);
+                // check generation id change at every push to tell when to create new segment
                 m_committedBuffers.offer(sb, ds, genId != m_previousGenId);
             } catch (IOException e) {
                 VoltDB.crashLocalVoltDB("Unable to write to export overflow.", true, e);
@@ -1847,9 +1849,9 @@ public class ExportDataSource implements Comparable<ExportDataSource> {
             for (Column c : CatalogUtil.getSortedCatalogItems(streamTable.getColumns(), "index")) {
                 size += 4 + c.getName().length() + 1 + 4;
             }
-            return  1 + 8 + 4 + /*schema size*/
-                    4 + m_streamName.length() +
-                    4 + VOLT_TRANSACTION_ID.length() + 1 + 4 +
+            return  PBDSegment.EXPORT_SCHEMA_HEADER_BYTES + /*schema size*/
+                    4 /*name length*/ + m_streamName.length() +
+                    4 /*name length*/ + VOLT_TRANSACTION_ID.length() + 1 /*column type*/ + 4 /*column length*/ +
                     4 + VOLT_EXPORT_TIMESTAMP.length() + 1 + 4 +
                     4 + VOLT_EXPORT_SEQUENCE_NUMBER.length() + 1 + 4 +
                     4 + VOLT_PARTITION_ID.length() + 1 + 4 +

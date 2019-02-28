@@ -26,8 +26,6 @@ import org.voltcore.utils.DeferredSerialization;
 import org.voltdb.HybridCrc32;
 
 public class PBDUtils {
-    private static ByteBuffer s_buffer = ByteBuffer.allocate(Long.BYTES);
-
     public static int writeDeferredSerialization(ByteBuffer mbuf, DeferredSerialization ds) throws IOException
     {
         int written = 0;
@@ -72,16 +70,5 @@ public class PBDUtils {
         headerBuf.putLong(crc.getValue());
         headerBuf.putInt(size);
         headerBuf.putInt(flag);
-    }
-
-    public static byte[] longToBytes(long x) {
-        s_buffer.putLong(0, x);
-        return s_buffer.array();
-    }
-
-    public static long bytesToLong(byte[] bytes) {
-        s_buffer.put(bytes, 0, bytes.length);
-        s_buffer.flip();//need flip
-        return s_buffer.getLong();
     }
 }
