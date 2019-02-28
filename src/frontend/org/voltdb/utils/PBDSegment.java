@@ -126,7 +126,7 @@ public abstract class PBDSegment {
     public static final int HEADER_NUM_OF_ENTRY_OFFSET = 8;
     public static final int HEADER_TOTAL_BYTES_OFFSET = 12;
 
-    static final int EXPORT_SCHEMA_HEADER_BYTES = 1 /*export buffer version*/ + 8 /*generation id*/ + 4 /*schema size*/;
+    public static final int EXPORT_SCHEMA_HEADER_BYTES = 1 /*export buffer version*/ + 8 /*generation id*/ + 4 /*schema size*/;
     // Export Segment Entry Header layout (each segment has multiple entries):
     //  - crc of segment entry (8 bytes),
     //  - total bytes of the entry (4 bytes),

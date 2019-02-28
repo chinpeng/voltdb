@@ -312,12 +312,14 @@ public class PersistentBinaryDeque implements BinaryDeque {
      * back at the specified path.
      *
      * @param nonce
+     * @param schemaDS
      * @param path
      * @param logger
      * @throws IOException
      */
-    public PersistentBinaryDeque(final String nonce, final File path, VoltLogger logger) throws IOException {
-        this(nonce, path, logger, true);
+    public PersistentBinaryDeque(final String nonce, DeferredSerialization schemaDS,
+            final File path, VoltLogger logger) throws IOException {
+        this(nonce, schemaDS, path, logger, true);
     }
 
     /**
@@ -325,11 +327,13 @@ public class PersistentBinaryDeque implements BinaryDeque {
      * This is a convenience method for testing so that poll with delete can be tested.
      *
      * @param nonce
+     * @param schemaDS
      * @param path
      * @param deleteEmpty
      * @throws IOException
      */
-    public PersistentBinaryDeque(final String nonce, final File path, VoltLogger logger,
+    public PersistentBinaryDeque(final String nonce, DeferredSerialization schemaDS,
+            final File path, VoltLogger logger,
             final boolean deleteEmpty) throws IOException {
         EELibraryLoader.loadExecutionEngineLibrary(true);
         m_path = path;
@@ -363,6 +367,9 @@ public class PersistentBinaryDeque implements BinaryDeque {
         }
         writeSegment.openForWrite(true);
         writeSegment.setFinal(false);
+        if (schemaDS != null) {
+            writeSegment.writeExtraHeader(schemaDS);
+        }
 
         if (m_usageSpecificLog.isDebugEnabled()) {
             m_usageSpecificLog.debug("Segment " + writeSegment.file()

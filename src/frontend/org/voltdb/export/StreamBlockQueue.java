@@ -25,6 +25,8 @@ import java.util.Iterator;
 import org.voltcore.logging.VoltLogger;
 import org.voltcore.utils.DBBPool.BBContainer;
 import org.voltcore.utils.DeferredSerialization;
+import org.voltdb.VoltDB;
+import org.voltdb.export.ExportDataSource.StreamTableSchemaSerializer;
 import org.voltdb.utils.BinaryDeque;
 import org.voltdb.utils.BinaryDeque.BinaryDequeReader;
 import org.voltdb.utils.BinaryDeque.BinaryDequeScanner;
@@ -83,10 +85,28 @@ public class StreamBlockQueue {
 
     private final String m_nonce;
     private final String m_path;
+    private final String m_streamName;
     private BinaryDequeReader m_reader;
 
-    public StreamBlockQueue(String path, String nonce) throws java.io.IOException {
-        m_persistentDeque = new PersistentBinaryDeque( nonce, new VoltFile(path), exportLog);
+    // For test
+    public StreamBlockQueue(String path, String nonce)
+            throws java.io.IOException {
+        m_streamName = null;
+        m_persistentDeque = new PersistentBinaryDeque( nonce, null, new VoltFile(path), exportLog);
+        m_path = path;
+        m_nonce = nonce;
+        m_reader = m_persistentDeque.openForRead(m_nonce);
+        if (exportLog.isDebugEnabled()) {
+            exportLog.debug(m_nonce + " At SBQ creation, PBD size is " + (m_reader.sizeInBytes() - (8 * m_reader.getNumObjects())));
+        }
+    }
+
+    public StreamBlockQueue(String path, String nonce, String streamName)
+            throws java.io.IOException {
+        m_streamName = streamName;
+        StreamTableSchemaSerializer ds = new StreamTableSchemaSerializer(
+                VoltDB.instance().getCatalogContext(), m_streamName);
+        m_persistentDeque = new PersistentBinaryDeque( nonce, ds, new VoltFile(path), exportLog);
         m_path = path;
         m_nonce = nonce;
         m_reader = m_persistentDeque.openForRead(m_nonce);
@@ -338,7 +358,9 @@ public class StreamBlockQueue {
 
         // close reopen reader
         m_persistentDeque.close();
-        m_persistentDeque = new PersistentBinaryDeque(m_nonce, new VoltFile(m_path), exportLog);
+        StreamTableSchemaSerializer ds = new StreamTableSchemaSerializer(
+                VoltDB.instance().getCatalogContext(), m_streamName);
+        m_persistentDeque = new PersistentBinaryDeque(m_nonce, ds, new VoltFile(m_path), exportLog);
         m_reader = m_persistentDeque.openForRead(m_nonce);
         // temporary debug stmt
         exportLog.info("After truncate, PBD size is " + (m_reader.sizeInBytes() - (8 * m_reader.getNumObjects())));

@@ -80,7 +80,7 @@ public class StreamBlock {
             VoltDB.crashLocalVoltDB("Broken refcounting in export", true, null);
         }
         final int refCount = m_schemaRefCount.decrementAndGet();
-        if (refCount == 0) {
+        if (refCount == 0 && m_schema != null) {
             m_schema.discard();
             m_schema = null;
         } else if (refCount < 0) {

@@ -85,7 +85,7 @@ public class TestStreamBlockQueue {
         System.gc();
         System.gc();
         System.runFinalization();
-        m_sbq = new StreamBlockQueue(  TEST_DIR, TEST_NONCE);
+        m_sbq = new StreamBlockQueue(TEST_DIR, TEST_NONCE);
         sb = m_sbq.peek();
         assertFalse(m_sbq.isEmpty());
         assertEquals(m_sbq.sizeInBytes(), 1024 * 1024 * 2);//USO and length prefix on disk

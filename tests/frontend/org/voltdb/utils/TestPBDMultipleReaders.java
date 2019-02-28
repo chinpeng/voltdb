@@ -247,7 +247,7 @@ public class TestPBDMultipleReaders {
     @Before
     public void setUp() throws Exception {
         TestPersistentBinaryDeque.setupTestDir();
-        m_pbd = new PersistentBinaryDeque(TestPersistentBinaryDeque.TEST_NONCE, TestPersistentBinaryDeque.TEST_DIR, logger );
+        m_pbd = new PersistentBinaryDeque(TestPersistentBinaryDeque.TEST_NONCE, null, TestPersistentBinaryDeque.TEST_DIR, logger );
     }
 
     @After

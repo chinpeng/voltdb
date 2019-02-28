@@ -78,7 +78,8 @@ public class TaskLogImpl implements TaskLog {
 
         m_partitionId = partitionId;
         m_cursorId = "TaskLog-" + partitionId;
-        m_buffers = new PersistentBinaryDeque(Integer.toString(partitionId), overflowDir, new VoltLogger("REJOIN"));
+        m_buffers = new PersistentBinaryDeque(
+                Integer.toString(partitionId), null, overflowDir, new VoltLogger("REJOIN"));
         m_reader = m_buffers.openForRead(m_cursorId);
         m_es = CoreUtils.getSingleThreadExecutor("TaskLog partition " + partitionId);
     }

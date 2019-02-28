@@ -69,6 +69,7 @@ import org.voltdb.exportclient.ExportClientBase;
 import org.voltdb.iv2.MpInitiator;
 import org.voltdb.sysprocs.ExportControl.OperationMode;
 import org.voltdb.utils.CatalogUtil;
+import org.voltdb.utils.PBDSegment;
 import org.voltdb.utils.VoltFile;
 
 import com.google_voltpatches.common.base.Preconditions;
@@ -233,7 +234,7 @@ public class ExportDataSource implements Comparable<ExportDataSource> {
         crc.update(m_signatureBytes);
         String nonce = m_tableName + "_" + crc.getValue() + "_" + partitionId;
 
-        m_committedBuffers = new StreamBlockQueue(overflowPath, nonce);
+        m_committedBuffers = new StreamBlockQueue(overflowPath, nonce, m_tableName);
         m_gapTracker = m_committedBuffers.scanForGap();
         // Pretend it's rejoin so we set first unpolled to a safe place
         resetStateInRejoinOrRecover(0L, true);
@@ -379,7 +380,7 @@ public class ExportDataSource implements Comparable<ExportDataSource> {
         PureJavaCrc32 crc = new PureJavaCrc32();
         crc.update(m_signatureBytes);
         final String nonce = m_tableName + "_" + crc.getValue() + "_" + m_partitionId;
-        m_committedBuffers = new StreamBlockQueue(overflowPath, nonce);
+        m_committedBuffers = new StreamBlockQueue(overflowPath, nonce, m_tableName);
         m_gapTracker = m_committedBuffers.scanForGap();
          // Pretend it's rejoin so we set first unpolled to a safe place
         resetStateInRejoinOrRecover(0L, true);
@@ -1817,7 +1818,7 @@ public class ExportDataSource implements Comparable<ExportDataSource> {
         public void serialize(ByteBuffer buf) throws IOException {
             buf.put((byte)StreamBlockQueue.EXPORT_BUFFER_VERSION);
             buf.putLong(m_catalogContext.m_genId);
-            buf.putInt(buf.limit() - 1 - 8 - 4); // size of schema
+            buf.putInt(buf.limit() - PBDSegment.EXPORT_SCHEMA_HEADER_BYTES); // size of schema
             buf.putInt(m_streamName.length());
             buf.put(m_streamName.getBytes(Constants.UTF8ENCODING));
 
