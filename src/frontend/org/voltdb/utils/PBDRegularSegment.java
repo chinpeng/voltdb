@@ -461,6 +461,7 @@ public class PBDRegularSegment extends PBDSegment {
 
         @Override
         public DBBPool.BBContainer poll(OutputContainerFactory factory, boolean checkCRC) throws IOException {
+
             if (m_closed) throw new IOException("Reader closed");
 
             if (!hasMoreEntries()) {
@@ -489,6 +490,8 @@ public class PBDRegularSegment extends PBDSegment {
                 if (length < 1 || length > PBDSegment.CHUNK_SIZE - PBDSegment.SEGMENT_HEADER_BYTES) {
                     LOG.warn("File corruption detected in " + m_file.getName() + ": invalid entry length. "
                             + "Truncate the file to last safe point.");
+                    PBDRegularSegment.this.close();
+                    openForWrite(false);
                     initNumEntries(m_objectReadIndex, m_bytesRead);
                     m_fc.truncate(m_readOffset);
                     return null;
@@ -506,12 +509,16 @@ public class PBDRegularSegment extends PBDSegment {
                         }
                         compressedBuf.b().flip();
                         if (checkCRC) {
+                            m_crc.reset();
                             m_crc.update(length);
                             m_crc.update(flags);
                             m_crc.update(compressedBuf.b());
+                            compressedBuf.b().flip();
                             if (entryCRC != m_crc.getValue() || INJECT_PBD_CHECKSUM_ERROR) {
                                 LOG.warn("File corruption detected in " + m_file.getName() + ": checksum error. "
                                         + "Truncate the file to last safe point.");
+                                PBDRegularSegment.this.close();
+                                openForWrite(false);
                                 initNumEntries(m_objectReadIndex, m_bytesRead);
                                 m_fc.truncate(m_readOffset);
                                 return null;
@@ -544,6 +551,8 @@ public class PBDRegularSegment extends PBDSegment {
                         if (entryCRC != m_crc.getValue() || INJECT_PBD_CHECKSUM_ERROR) {
                             LOG.warn("File corruption detected in " + m_file.getName() + ": checksum error. "
                                     + "Truncate the file to last safe point.");
+                            PBDRegularSegment.this.close();
+                            openForWrite(false);
                             initNumEntries(m_objectReadIndex, m_bytesRead);
                             m_fc.truncate(m_readOffset);
                             return null;

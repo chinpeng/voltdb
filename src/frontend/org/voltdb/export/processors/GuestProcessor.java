@@ -344,6 +344,8 @@ public class GuestProcessor implements ExportDataProcessor {
                          */
                         while (!m_shutdown) {
                             try {
+                                ByteBuffer sbuf = null;
+                                int schemaSize = 0;
                                 final ByteBuffer buf = cont.b();
                                 buf.position(startPosition);
                                 buf.order(ByteOrder.LITTLE_ENDIAN);
@@ -355,13 +357,13 @@ public class GuestProcessor implements ExportDataProcessor {
                                     assert(version == StreamBlockQueue.EXPORT_BUFFER_VERSION);
                                     // update the global generation id of guest processor
                                     m_genId = schemaBuf.getLong();
-                                    int schemaSize = schemaBuf.getInt();
+                                    schemaSize = schemaBuf.getInt();
                                     ExportRow previousRow = edb.getPreviousRow();
                                     // update the decoder if current generation is different than previous row
                                     if (previousRow == null || previousRow.generation != m_genId) {
                                         byte[] schemadata = new byte[schemaSize];
                                         schemaBuf.get(schemadata, 0, schemaSize);
-                                        ByteBuffer sbuf = ByteBuffer.wrap(schemadata);
+                                        sbuf = ByteBuffer.wrap(schemadata);
                                         sbuf.order(ByteOrder.LITTLE_ENDIAN);
                                         edb.setPreviousRow(
                                                 ExportRow.decodeBufferSchema(
@@ -390,10 +392,16 @@ public class GuestProcessor implements ExportDataProcessor {
                                         //New style connector.
                                         try {
                                             cont.updateStartTime(System.currentTimeMillis());
+                                            if (edb.getPreviousRow() == null && sbuf != null) {
+                                                edb.setPreviousRow(
+                                                        ExportRow.decodeBufferSchema(
+                                                                sbuf, schemaSize,
+                                                                source.getPartitionId(), m_genId));
+                                            }
                                             row = ExportRow.decodeRow(edb.getPreviousRow(), source.getPartitionId(), m_startTS, rowdata);
                                             edb.setPreviousRow(row);
                                         } catch (IOException ioe) {
-                                            m_logger.warn("Failed decoding row for partition" + source.getPartitionId() + ". " + ioe.getMessage());
+                                            m_logger.warn("Failed decoding row for partition " + source.getPartitionId() + ". " + ioe.getMessage());
                                             cont.discard();
                                             cont = null;
                                             break;

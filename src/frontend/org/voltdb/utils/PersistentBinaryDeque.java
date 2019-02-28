@@ -119,6 +119,9 @@ public class PersistentBinaryDeque implements BinaryDeque {
                     if (segmentReader == null) segmentReader = m_segment.openForRead(m_cursorId);
                 }
                 BBContainer retcont = segmentReader.poll(ocf, checkCRC);
+                if (retcont == null) {
+                    return null;
+                }
 
                 m_numRead++;
                 assertions();
@@ -248,7 +251,7 @@ public class PersistentBinaryDeque implements BinaryDeque {
                             PBDSegmentReader segmentReader = segment.getReader(m_cursorId);
                             // Don't delete if this is the last segment.
                             // Cannot be deleted if this reader hasn't finished discarding this.
-                            if (segment == peekLastSegment() || !segmentReader.allReadAndDiscarded()) {
+                            if (segment == peekLastSegment() || (segmentReader != null && !segmentReader.allReadAndDiscarded())) {
                                 return;
                             }
                             if (canDeleteSegment(segment)) {
@@ -273,10 +276,12 @@ public class PersistentBinaryDeque implements BinaryDeque {
                 }
                 assertions();
                 moveToValidSegment();
-                if (m_segment.isOpenForReading(m_cursorId)) { //this reader has started reading from curr segment.
-                    if (m_segment.getReader(m_cursorId).readIndex() == 0) {
-                        return true;
-                    }
+                PBDSegmentReader segmentReader = m_segment.getReader(m_cursorId);
+                if (segmentReader == null) {
+                    segmentReader = m_segment.openForRead(m_cursorId);
+                }
+                if (m_segment.getReader(m_cursorId).readIndex() == 0) {
+                    return true;
                 }
                 return false;
             }

@@ -228,11 +228,12 @@ public abstract class PBDSegment {
         int sizeInBytes = 0;
 
         DBBPool.BBContainer cont;
+        DBBPool.BBContainer schemaCont = null;
         while (true) {
             final long beforePos = reader.readOffset();
 
             if (reader.readIndex() == 0) {
-                reader.getSchema(PersistentBinaryDeque.UNSAFE_CONTAINER_FACTORY, !isFinal());
+                schemaCont = reader.getSchema(PersistentBinaryDeque.UNSAFE_CONTAINER_FACTORY, !isFinal());
             }
 
             cont = reader.poll(PersistentBinaryDeque.UNSAFE_CONTAINER_FACTORY, !isFinal());
@@ -283,6 +284,10 @@ public abstract class PBDSegment {
                 }
             } finally {
                 cont.discard();
+                if (schemaCont != null) {
+                    schemaCont.discard();
+                    schemaCont = null;
+                }
             }
         }
         int entriesScanned = reader.readIndex();
@@ -337,6 +342,7 @@ public abstract class PBDSegment {
                 cont.discard();
                 if (schemaCont != null) {
                     schemaCont.discard();
+                    schemaCont = null;
                 }
             }
         }
